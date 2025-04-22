@@ -1,3 +1,3 @@
 # README.md `ncbi_genomes`
 
-This folder would hold genome sequence data from NCBI
+16S rRNA sequence data from NCBI BioProject: PRJNA639618
