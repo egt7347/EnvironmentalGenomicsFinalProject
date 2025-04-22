@@ -1,3 +1,3 @@
 # README.md `cleaned`
 
-This folder would hold processed or cleaned versions of the data in the `raw` directory - possibly in multiple subfolders.
+This folder holds the cleaned versions of the data in the `raw` directory. Cleaned via QIIME2
