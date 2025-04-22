@@ -1,0 +1,1 @@
+Contains all the code to do statistical analysis. This includes loading packages, setting up a phyloseq object, calculating observed and shannon diversity, running and ANOVA, rarefaction, PERMANOVA, PCoA creation, and creation of a relative abundance plot.
