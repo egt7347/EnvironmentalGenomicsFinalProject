@@ -1,0 +1,291 @@
+## Statisical Analysis in R##
+#Loading Packages#
+library(ggplot2)
+library(vegan)
+library(dplyr)
+library(phyloseq)
+library(ape)
+library(tidyr)
+library(microbiome)
+
+## Load data files: SV table (counts), taxonomy table, and metadata
+sv <- read.csv("feature-table.csv")
+row.names(sv) <- sv$OTU_ID
+sv$OTU_ID <- NULL
+
+taxa <- read.csv("taxonomy.csv")
+row.names(taxa) <- taxa$OTU_ID
+taxa$OTU_ID <- NULL
+
+#metadata <- read.csv("sample-metadata.csv")
+
+metadata <- read.csv("metadata2.csv")
+
+# Convert dataframes into phyloseq format
+sv = otu_table(sv, taxa_are_rows = TRUE)
+
+taxa = tax_table(as.matrix(taxa))
+
+metadata <- sample_data(metadata)
+rownames(metadata) <- metadata$SampleID
+metadata$SampleID <- NULL
+
+# merge SV & taxa data into phyloseq object
+physeq <- phyloseq(sv, taxa)
+
+# create random phylo tree with ASV names as tips
+random_tree = rtree(ntaxa(physeq), rooted=TRUE, tip.label=taxa_names(physeq))
+
+# create new phyloseq object with all info
+physeq16s <- phyloseq(sv, taxa, metadata, random_tree)
+
+# Create table, number of features for each phyla
+table(tax_table(physeq16s)[, "Phylum"], exclude = NULL)
+
+# Remove features with ambiguous phylum annotation 
+physeq16s <- subset_taxa(physeq16s, !is.na(Phylum) &
+                           !Phylum %in% c("", "0")) 
+physeq16s <- subset_taxa(physeq16s, !is.na(Domain) &
+                           !Domain %in% c("Eukaryota", "0")) 
+physeq16s
+saveRDS(physeq16s, "physeq16s_coral.rds")
+
+#Loading in & Summarizing the data #
+
+physeq16s <- readRDS("physeq16s_coral.rds") 
+sample_data(physeq16s)
+summarize_phyloseq(physeq16s)
+table(tax_table(physeq16s)[, "Domain"], exclude = NULL)
+table(tax_table(physeq16s)[, "Phylum"], exclude = NULL)
+
+#Alpha Diversity# 
+adiv <- data.frame(
+  "Observed" = phyloseq::estimate_richness(physeq16s, measures = "Observed"),
+  "Shannon" = phyloseq::estimate_richness(physeq16s, measures = "Shannon"),
+  "transplantation" = phyloseq::sample_data(physeq16s)$transplantation,
+  "temperature" = phyloseq::sample_data(physeq16s)$temperature,
+  "depth"  = phyloseq::sample_data(physeq16s)$depth,
+  "visibility" = phyloseq::sample_data(physeq16s)$visibility)
+
+alpha <- adiv %>%
+  gather(key = metric, value = value, c("Observed", "Shannon")) %>%
+  mutate(metric = factor(metric, levels = c("Observed", "Shannon"))) %>%
+  ggplot(aes(x = factor(transplantation,levels=c("Low/Low","Low/Medium","Low/High", "Medium/Low", "Medium/Medium", "Medium/High")), 
+             y = value, 
+             fill= transplantation)) +
+  geom_boxplot() +
+  geom_jitter(color="black", size = 1.5, alpha=0.5, position=position_jitter(0.2)) +
+  labs(x = "", y = "") +
+  facet_wrap(~ metric, scales = "free") +
+  theme_bw()+ 
+  theme(axis.text.x=element_text(angle=90,vjust=1,hjust=1))+
+  theme(legend.position = "none")
+
+png(width=8, height=3.5, units="in", res=600, file = "alphadiversity.png")
+print(alpha)
+dev.off()
+
+#ANOVA Richness
+summary(aov(Observed ~ adiv$transplantation, data=adiv))
+#                      Df  Sum Sq Mean Sq F value Pr(>F)  
+# adiv$transplantation  5  371874   74375   2.778 0.0246 *
+# Residuals            65 1739968   26769                 
+
+# ANOVA shannon 
+summary(aov(Shannon ~ adiv$transplantation, data=adiv))
+#                      Df Sum Sq Mean Sq F value Pr(>F)
+# adiv$transplantation  5  2.264  0.4528    1.72  0.143
+# Residuals            65 17.112  0.2633
+
+alpha <- adiv %>%
+  gather(key = metric, value = value, c("Observed", "Shannon")) %>%
+  mutate(metric = factor(metric, levels = c("Observed", "Shannon"))) %>%
+  ggplot(aes(x = as.factor(transplantation),
+             y = value, 
+             fill= as.factor(transplantation))) +
+  geom_boxplot() +
+  geom_jitter(color="black", size = 1.5, alpha=0.5, position=position_jitter(0.2)) +
+  labs(x = "", y = "") +
+  facet_wrap(~ metric, scales = "free") +
+  theme_bw()+
+  theme(legend.position = "none")
+
+png(width=8, height=3.5, units="in", res=600, file = "alphadiversitytransplantation.png")
+print(alpha)
+dev.off()
+
+alpha <- adiv %>%
+  gather(key = metric, value = value, c("Observed", "Shannon")) %>%
+  mutate(metric = factor(metric, levels = c("Observed", "Shannon"))) %>%
+  ggplot(aes(x = as.factor(temperature),
+             y = value, 
+             fill= as.factor(temperature))) +
+  geom_boxplot() +
+  geom_jitter(color="black", size = 1.5, alpha=0.5, position=position_jitter(0.2)) +
+  labs(x = "", y = "") +
+  facet_wrap(~ metric, scales = "free") +
+  theme_bw()+
+  theme(legend.position = "none")
+
+png(width=8, height=3.5, units="in", res=600, file = "alphadiversitytemp.png")
+print(alpha)
+dev.off()
+
+alpha <- adiv %>%
+  gather(key = metric, value = value, c("Observed", "Shannon")) %>%
+  mutate(metric = factor(metric, levels = c("Observed", "Shannon"))) %>%
+  ggplot(aes(x = transplantation,
+             y = value, 
+             fill= as.factor(temperature))) +
+  geom_boxplot() +
+  geom_jitter(color="black", size = 1.5, alpha=0.5, position=position_jitter(0.2)) +
+  labs(x = "", y = "") +
+  facet_wrap(~ metric, scales = "free") +
+  theme_bw()+
+  theme(axis.text.x=element_text(angle=90,vjust=1,hjust=1))
+
+png(width=8, height=3.5, units="in", res=600, file = "alphadiversitytemptransplant.png")
+print(alpha)
+dev.off()
+
+alpha <- adiv %>%
+  gather(key = metric, value = value, c("Observed", "Shannon")) %>%
+  mutate(metric = factor(metric, levels = c("Observed", "Shannon"))) %>%
+  ggplot(aes(x = transplantation,
+             y = value, 
+             fill= as.factor(depth))) +
+  geom_boxplot() +
+  geom_jitter(color="black", size = 1.5, alpha=0.5, position=position_jitter(0.2)) +
+  labs(x = "", y = "") +
+  facet_wrap(~ metric, scales = "free") +
+  theme_bw()+
+  theme(axis.text.x=element_text(angle=90,vjust=1,hjust=1))
+
+png(width=8, height=3.5, units="in", res=600, file = "alphadiversitydepthtransplant.png")
+print(alpha)
+dev.off()
+
+alpha <- adiv %>%
+  gather(key = metric, value = value, c("Observed", "Shannon")) %>%
+  mutate(metric = factor(metric, levels = c("Observed", "Shannon"))) %>%
+  ggplot(aes(x = transplantation,
+             y = value, 
+             fill= as.factor(visibility))) +
+  geom_boxplot() +
+  geom_jitter(color="black", size = 1.5, alpha=0.5, position=position_jitter(0.2)) +
+  labs(x = "", y = "") +
+  facet_wrap(~ metric, scales = "free") +
+  theme_bw()+
+  theme(axis.text.x=element_text(angle=90,vjust=1,hjust=1))
+
+png(width=8, height=3.5, units="in", res=600, file = "alphadiversityvistransplant.png")
+print(alpha)
+dev.off()
+
+#Rarefaction#
+ps.rarefied=rarefy_even_depth(physeq16s, rngseed=1, sample.size =8000, replace=F) 
+
+#Beta-Diversity#
+physeq16s.log <- transform_sample_counts(ps.rarefied, function(x) log(1 + x))
+physeq16s.ord <- ordinate(physeq16s.log, method = "MDS", distance = "bray")
+
+comp <- plot_ordination(physeq16s.log, physeq16s.ord, color = "transplanted.to", shape = "transplanted.from")+ 
+  geom_point(size = 2) +
+  theme_bw()+
+  stat_ellipse()
+
+png(width=5, height=3.5, units="in", res=600, file = "rarefiedbray.png")
+print(comp)
+dev.off()
+
+wu.dist <- phyloseq::distance(physeq16s.log, method="bray") # calculates a pairwise distance for every point
+vegan::adonis2(wu.dist ~ sample_data(physeq16s.log)$transplanted.to * sample_data(physeq16s.log)$transplanted.from, by = "terms")
+
+                                         vegan::adonis2(formula = wu.dist ~ sample_data(physeq16s.log)$transplanted.to, by = "terms")
+
+vegan::adonis2(formula = wu.dist ~ sample_data(physeq16s.log)$transplanted.to * sample_data(physeq16s.log)$transplanted.from, by = "terms")
+
+# Df
+# sample_data(physeq16s.log)$transplanted.to                                               2
+# sample_data(physeq16s.log)$transplanted.from                                             1
+# sample_data(physeq16s.log)$transplanted.to:sample_data(physeq16s.log)$transplanted.from  2
+# Residual                                                                                59
+# Total                                                                                   64
+# SumOfSqs
+# sample_data(physeq16s.log)$transplanted.to                                                0.3655
+# sample_data(physeq16s.log)$transplanted.from                                              0.0742
+# sample_data(physeq16s.log)$transplanted.to:sample_data(physeq16s.log)$transplanted.from   0.1417
+# Residual                                                                                  3.8701
+# Total                                                                                     4.4514
+# R2
+# sample_data(physeq16s.log)$transplanted.to                                              0.08211
+# sample_data(physeq16s.log)$transplanted.from                                            0.01666
+# sample_data(physeq16s.log)$transplanted.to:sample_data(physeq16s.log)$transplanted.from 0.03183
+# Residual                                                                                0.86940
+# Total                                                                                   1.00000
+# F
+# sample_data(physeq16s.log)$transplanted.to                                              2.7860
+# sample_data(physeq16s.log)$transplanted.from                                            1.1308
+# sample_data(physeq16s.log)$transplanted.to:sample_data(physeq16s.log)$transplanted.from 1.0799
+# Residual                                                                                      
+# Total                                                                                         
+# Pr(>F)
+# sample_data(physeq16s.log)$transplanted.to                                               0.001
+# sample_data(physeq16s.log)$transplanted.from                                             0.080
+# sample_data(physeq16s.log)$transplanted.to:sample_data(physeq16s.log)$transplanted.from  0.092
+# Residual                                                                                      
+# Total                                                                                         
+
+#Relative Abundance#
+physeq16s.rel = transform_sample_counts(physeq16s.log, function(x) x/sum(x)*100)
+
+glom <- tax_glom(physeq16s.rel, taxrank = 'Family', NArm = FALSE)
+ps.melt <- psmelt(glom)
+
+ps.melt$Family <- as.character(ps.melt$Family)
+
+ps.melt <- ps.melt %>%
+  group_by(Family) %>%
+  mutate(median=median(Abundance))
+
+keep <- unique(ps.melt$Family[ps.melt$Abundance > 3.75]) 
+
+ps.melt$Family[!(ps.melt$Family %in% keep)] <- "Other"
+
+ps.melt2 <- ps.melt %>%
+  group_by(Sample,transplanted.to, Family) %>%
+  dplyr::summarise(Abundance=sum(Abundance))
+
+palette <- c("#aedae6", "#ce96ce", "#d1b58c", "#5e9da0", "#e5ac8e", "#33477f", "#dc7092", "#6ea3db", "#7d3e7d", "#215c5f", "#Dee0e2","#Dee0e2", "#Dee0e2")
+
+rel.abund <- ggplot(ps.melt2, aes(x = Sample, y = Abundance, 
+                                  fill = Family)) + 
+  geom_bar(stat = "identity", aes(fill=factor(Family, levels = c("Flavobacteriaceae",
+                                                                 "Pirellulaceae", 
+                                                                 "Rhodobacteraceae",
+                                                                 "Amoebophilaceae", 
+                                                                 "Cyclobacteriaceae", 
+                                                                 "Sphingomonadaceae",
+                                                                 "Saprospiraceae", 
+                                                                 "Spirochaetota",
+                                                                 "Halieaceae",
+                                                                 "Rubritaleaceae",
+                                                                 "Lachnospiraceae",
+                                                                 "Unknown_Family",
+                                                                "0",
+                                                                 "Other")))) + 
+  labs(x="", y="Relative Abundance (%)") +
+  theme_bw() + 
+  theme(legend.position = "right", 
+        legend.key.size = unit(0.2,'cm'),
+        axis.text.x = element_blank())+
+  scale_fill_manual(values=palette)+
+facet_grid(.~factor(transplanted.to, levels = c('Rosario',
+                                                                                 'Varadero',
+                                                                                 'Cartagena_Bay')), 
+                                              scales = "free", switch = "x", space = "free_x")
+
+png(width=7, height=3, units="in", res=600, file = "relativeabund.family.png")
+print(rel.abund)
+dev.off()
+                                        
